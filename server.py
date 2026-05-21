@@ -814,6 +814,101 @@ def _build_report(pages: list, base_url: str, crawl_id: int,
         lines.append("")
         sep()
 
+    # ── Analytics coverage ────────────────────────────────────────────────────
+    # analytics field: {ga4_id, gtm_id, fb_pixel, hotjar, mixpanel, ...}
+    pages_no_analytics   = []
+    pages_no_ga4         = []
+    pages_no_gtm         = []
+    analytics_tool_count = defaultdict(int)
+
+    for p in pages:
+        if not str(p.get("status_code","")).startswith("2"):
+            continue
+        analytics = p.get("analytics") or {}
+        url = p.get("url", "")
+        if analytics:
+            # Count which tools are present across site
+            for tool in ["ga4_id","gtm_id","fb_pixel","hotjar","mixpanel"]:
+                if analytics.get(tool):
+                    analytics_tool_count[tool] += 1
+            if not analytics.get("ga4_id"):
+                pages_no_ga4.append(url)
+            if not analytics.get("gtm_id"):
+                pages_no_gtm.append(url)
+        else:
+            pages_no_analytics.append(url)
+
+    if analytics_tool_count or pages_no_analytics:
+        h(2, "📈 Analytics Coverage")
+        if analytics_tool_count:
+            lines.append("| Tool | Pages Detected |")
+            lines.append("|------|---------------|")
+            tool_labels = {"ga4_id":"Google Analytics 4","gtm_id":"Google Tag Manager",
+                           "fb_pixel":"Facebook Pixel","hotjar":"Hotjar","mixpanel":"Mixpanel"}
+            for tool, count in sorted(analytics_tool_count.items(), key=lambda x: -x[1]):
+                label = tool_labels.get(tool, tool)
+                lines.append(f"| {label} | {count} / {len(ok)} pages |")
+            lines.append("")
+            if pages_no_ga4 and analytics_tool_count.get("ga4_id"):
+                h(3, f"Pages Missing GA4 ({len(pages_no_ga4)})")
+                lines.append("> **Fix:** Ensure GA4 fires on every page — check tag triggers in GTM.\n")
+                for url in pages_no_ga4[:15]:
+                    li(f"`{url}`")
+                lines.append("")
+        if pages_no_analytics:
+            h(3, f"Pages with No Analytics Detected ({len(pages_no_analytics)})")
+            lines.append("> **Fix:** Add GA4 / GTM to these pages. Untracked pages = blind spots in reporting.\n")
+            for url in pages_no_analytics[:15]:
+                li(f"`{url}`")
+            lines.append("")
+        sep()
+
+    # ── Heading structure ─────────────────────────────────────────────────────
+    pages_no_h2        = []   # has content but no H2
+    pages_h2_no_h1     = []   # has H2 but no H1 (skipped H1)
+    pages_heading_rich = []   # >10 H2s (possibly over-structured or auto-generated)
+
+    for p in pages:
+        if not str(p.get("status_code","")).startswith("2"):
+            continue
+        url   = p.get("url","")
+        h1    = (p.get("h1") or "").strip()
+        h2s   = p.get("h2") or []
+        words = p.get("word_count", 0) or 0
+        h2_count = len(h2s) if isinstance(h2s, list) else (1 if h2s else 0)
+
+        if words > 200 and h2_count == 0:
+            pages_no_h2.append((url, words))
+        if h2_count > 0 and not h1:
+            pages_h2_no_h1.append(url)
+        if h2_count > 10:
+            pages_heading_rich.append((url, h2_count))
+
+    if pages_no_h2 or pages_h2_no_h1:
+        h(2, "🏗️ Heading Structure")
+        if pages_no_h2:
+            h(3, f"Pages with Content but No H2 ({len(pages_no_h2)})")
+            lines.append("> **Fix:** Break long content into sections with H2 subheadings. "
+                         "H2s are the primary way crawlers and readers understand page structure.\n")
+            lines.append("| URL | Words |")
+            lines.append("|-----|-------|")
+            for url, words in sorted(pages_no_h2, key=lambda x: -x[1])[:15]:
+                lines.append(f"| `{url}` | {words} |")
+            lines.append("")
+        if pages_h2_no_h1:
+            h(3, f"Has H2 but No H1 ({len(pages_h2_no_h1)} pages)")
+            lines.append("> **Fix:** Add an H1. Having H2s without H1 breaks heading hierarchy.\n")
+            for url in pages_h2_no_h1[:10]:
+                li(f"`{url}`")
+            lines.append("")
+        if pages_heading_rich:
+            h(3, f"Unusually High H2 Count — over 10 ({len(pages_heading_rich)} pages)")
+            lines.append("> Review: many H2s on one page can dilute keyword focus.\n")
+            for url, count in sorted(pages_heading_rich, key=lambda x: -x[1])[:10]:
+                li(f"`{url}` — {count} H2s")
+            lines.append("")
+        sep()
+
     # ── Issues breakdown (LibreCrawl's own detector) ──────────────────────────
     if issues_type_count:
         h(2, "🐛 Issue Type Breakdown (LibreCrawl detector)")
@@ -1182,6 +1277,118 @@ def librecrawl_visualization_data() -> dict:
     Returns: nodes list (url, depth, status) and edges list (source → target links).
     """
     return call("GET", "/api/visualization_data")
+
+
+@mcp.tool()
+def librecrawl_internal_links_analysis(crawl_id: int = None) -> dict:
+    """
+    Deep internal linking analysis — reveals your site's internal authority distribution.
+
+    Answers:
+    - Which pages get the most internal links? (= Google considers them most important)
+    - Which pages have zero outgoing internal links? (dead ends — no crawl flow out)
+    - Which pages link out to the most others? (potential crawl budget hubs)
+    - What are the top anchor text patterns across the site?
+
+    Use this after librecrawl_audit() to understand internal link equity.
+
+    Args:
+        crawl_id: ID from librecrawl_start_crawl (optional — uses current crawl)
+    """
+    if crawl_id is not None:
+        call("POST", f"/api/crawls/{crawl_id}/load")
+
+    r = get_client().post(f"{BASE}/api/export_data", json={
+        "format": "json",
+        "fields": ["url", "status_code", "title", "depth",
+                   "internal_links", "external_links", "links_detailed", "linked_from"],
+    }, timeout=120)
+    r.raise_for_status()
+    export = r.json()
+    pages  = export if isinstance(export, list) else export.get("urls", export.get("pages", []))
+
+    if not pages:
+        return {"success": False, "error": "No pages found."}
+
+    # Build inbound link map from links_detailed
+    inbound_count = defaultdict(int)   # url → how many pages link TO it
+    outbound_count = {}                # url → how many internal links it sends out
+    anchor_text_count = defaultdict(int)
+
+    for p in pages:
+        src   = p.get("url","")
+        links = p.get("links_detailed") or []
+        out   = 0
+        if isinstance(links, list):
+            for lk in links:
+                tgt    = lk.get("url") or lk.get("href") or ""
+                anchor = (lk.get("anchor_text") or lk.get("text") or "").strip().lower()
+                is_int = lk.get("is_internal", True)
+                if tgt and is_int:
+                    inbound_count[tgt] += 1
+                    out += 1
+                if anchor and len(anchor) > 2:
+                    anchor_text_count[anchor] += 1
+        # Fallback: use internal_links count field if links_detailed empty
+        if out == 0:
+            out = p.get("internal_links") or 0
+        outbound_count[src] = out
+
+    ok_pages = [p for p in pages if str(p.get("status_code","")).startswith("2")]
+
+    # Top pages by inbound links (internal authority)
+    top_linked = sorted(
+        [(url, cnt) for url, cnt in inbound_count.items()],
+        key=lambda x: -x[1]
+    )[:20]
+
+    # Pages with zero outgoing internal links (dead ends — crawl flow stops here)
+    dead_ends = [
+        p.get("url") for p in ok_pages
+        if (outbound_count.get(p.get("url",""), 0) == 0)
+        and p.get("word_count", 0) > 100   # ignore tiny pages
+    ]
+
+    # Pages with zero inbound links (no internal authority — orphans)
+    orphans = [
+        p.get("url") for p in ok_pages
+        if inbound_count.get(p.get("url",""), 0) == 0
+    ]
+
+    # Top anchors
+    top_anchors = sorted(anchor_text_count.items(), key=lambda x: -x[1])[:20]
+
+    # Pages with most outbound links
+    top_senders = sorted(
+        [(url, cnt) for url, cnt in outbound_count.items() if cnt > 0],
+        key=lambda x: -x[1]
+    )[:10]
+
+    return {
+        "success": True,
+        "pages_analysed": len(pages),
+        "top_linked_pages": [
+            {"url": url, "inbound_internal_links": cnt,
+             "title": next((p.get("title","") for p in pages if p.get("url")==url), "")}
+            for url, cnt in top_linked
+        ],
+        "dead_end_pages": {
+            "count": len(dead_ends),
+            "note": "These pages have no outgoing internal links — crawl flow stops here.",
+            "urls": dead_ends[:20],
+        },
+        "orphan_pages": {
+            "count": len(orphans),
+            "note": "No internal links point to these pages — Google may not discover them.",
+            "urls": orphans[:20],
+        },
+        "top_outbound_pages": [
+            {"url": url, "internal_links_out": cnt} for url, cnt in top_senders
+        ],
+        "top_anchor_texts": [
+            {"anchor": anchor, "count": cnt} for anchor, cnt in top_anchors
+        ],
+    }
 
 
 # ── PageSpeed Insights ────────────────────────────────────────────────────────

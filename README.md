@@ -252,19 +252,25 @@ The GSC section includes: indexing errors with fix hints, crawl errors, manual a
 
 | Tool | What it does |
 |------|-------------|
-| `librecrawl_audit` | **One-call full audit** — crawl + site checks + report. Use this. |
-| `librecrawl_site_check` | Instant: robots.txt, sitemap, HTTPS, www redirect — no crawl |
-| `librecrawl_generate_report` | Re-generate report from a completed crawl |
+| `librecrawl_audit` | **One-call full audit** — crawl + site checks + 30+ checks + report |
+| `librecrawl_site_check` | Instant: robots.txt, sitemap, HTTPS, www — no crawl needed |
+| `librecrawl_generate_report` | Re-generate report from a past crawl |
 | `librecrawl_start_crawl` | Start async crawl, returns `crawl_id` |
 | `librecrawl_get_status` | Poll crawl progress |
-| `librecrawl_export_results` | Raw JSON export |
+| `librecrawl_pause_crawl` | Pause a running crawl |
+| `librecrawl_resume_crawl` | Resume a paused crawl |
 | `librecrawl_stop_crawl` | Stop running crawl |
+| `librecrawl_export_results` | Raw JSON export |
 | `librecrawl_list_crawls` | List all saved crawls |
-| `librecrawl_pagespeed` | Core Web Vitals for one URL (PSI API) |
+| `librecrawl_get_settings` | Show current crawler settings |
+| `librecrawl_filter_issues` | Exclude false-positive patterns from results |
+| `librecrawl_visualization_data` | Site link graph (nodes + edges) |
+| `librecrawl_internal_links_analysis` | Internal authority map — top linked pages, orphans, dead ends, anchor text |
+| `librecrawl_pagespeed` | Core Web Vitals for one URL (Google PSI API) |
 | `librecrawl_pagespeed_audit` | Batch CWV for up to 25 URLs, ranked worst-first |
-| `librecrawl_schema_check` | Schema.org / JSON-LD for one URL |
+| `librecrawl_schema_check` | Schema.org / JSON-LD for one URL — rich result mapping |
 | `librecrawl_schema_audit` | Schema coverage across multiple URLs |
-| `librecrawl_append_gsc_section` | Merge GSC errors into an existing report |
+| `librecrawl_append_gsc_section` | Merge GSC indexing errors into any audit report |
 
 ---
 
@@ -357,7 +363,6 @@ session_id = session.get('session_id')  # → correct value
 
 - [LibreCrawl](https://github.com/PhialsBasement/LibreCrawl) — the crawler this wraps
 - [mcp-gsc](https://github.com/AminForou/mcp-gsc) — Google Search Console MCP (876 stars, recommended)
-- [youtube-channel-mcp](https://github.com/adityaarsharma/youtube-channel-mcp) — YouTube analytics MCP server
 - [Model Context Protocol](https://modelcontextprotocol.io)
 
 ---
