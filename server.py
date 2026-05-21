@@ -8,17 +8,21 @@ Source: https://github.com/adityaarsharma/librecrawl-mcp
 import os
 import json
 import time
+import re
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
+from html.parser import HTMLParser
 import httpx
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("librecrawl-mcp")
 
-BASE     = f"http://127.0.0.1:{os.getenv('LIBRECRAWL_PORT', '5080')}"
-MCP_PORT = int(os.getenv('MCP_PORT', '5081'))
-REPORTS_DIR = Path(os.getenv('REPORTS_DIR', Path.home() / 'librecrawl-reports'))
+BASE            = f"http://127.0.0.1:{os.getenv('LIBRECRAWL_PORT', '5080')}"
+MCP_PORT        = int(os.getenv('MCP_PORT', '5081'))
+REPORTS_DIR     = Path(os.getenv('REPORTS_DIR', Path.home() / 'librecrawl-reports'))
+PSI_API_KEY     = os.getenv('PAGESPEED_API_KEY', '')   # Google PageSpeed Insights
+PSI_API_BASE    = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 
 _client = None
 
@@ -547,6 +551,259 @@ def librecrawl_list_crawls() -> dict:
 def librecrawl_stop_crawl() -> dict:
     """Stop the currently running crawl."""
     return call("POST", "/api/stop_crawl")
+
+
+# ── PageSpeed Insights helper ─────────────────────────────────────────────────
+
+def _fetch_psi(url: str, strategy: str = "mobile") -> dict:
+    """Fetch Core Web Vitals + performance score from Google PSI API."""
+    if not PSI_API_KEY:
+        return {"error": "PAGESPEED_API_KEY not set. Add it to your environment."}
+    params = {"url": url, "key": PSI_API_KEY, "strategy": strategy,
+              "category": ["performance", "seo", "accessibility", "best-practices"]}
+    try:
+        r = httpx.get(PSI_API_BASE, params=params, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+    lhr   = data.get("lighthouseResult", {})
+    cats  = lhr.get("categories", {})
+    audits = lhr.get("audits", {})
+    fcp_data = data.get("loadingExperience", {}).get("metrics", {})
+
+    def score(cat): return round((cats.get(cat, {}).get("score") or 0) * 100)
+    def ms(audit):
+        v = audits.get(audit, {}).get("numericValue")
+        return round(v) if v else None
+    def rating(audit):
+        return audits.get(audit, {}).get("displayValue", "")
+
+    # CWV from field data (real users via CrUX)
+    field = {}
+    for metric, key in [("LCP","LARGEST_CONTENTFUL_PAINT_MS"),("FID","FIRST_INPUT_DELAY_MS"),
+                         ("CLS","CUMULATIVE_LAYOUT_SHIFT_SCORE"),("INP","INTERACTION_TO_NEXT_PAINT"),
+                         ("FCP","FIRST_CONTENTFUL_PAINT_MS"),("TTFB","EXPERIMENTAL_TIME_TO_FIRST_BYTE")]:
+        m = fcp_data.get(key, {})
+        if m:
+            field[metric] = {"value": m.get("percentile"), "category": m.get("category")}
+
+    # Lab data (Lighthouse simulation)
+    lab = {
+        "FCP_ms":  ms("first-contentful-paint"),
+        "LCP_ms":  ms("largest-contentful-paint"),
+        "TBT_ms":  ms("total-blocking-time"),
+        "CLS":     audits.get("cumulative-layout-shift", {}).get("numericValue"),
+        "Speed_Index_ms": ms("speed-index"),
+        "TTI_ms":  ms("interactive"),
+    }
+
+    # Top opportunities
+    opps = []
+    for audit_id, audit in audits.items():
+        if audit.get("details", {}).get("type") == "opportunity":
+            savings = audit.get("details", {}).get("overallSavingsMs", 0) or 0
+            if savings > 200:
+                opps.append({"title": audit.get("title"), "savings_ms": round(savings)})
+    opps.sort(key=lambda x: -x["savings_ms"])
+
+    return {
+        "url": url,
+        "strategy": strategy,
+        "scores": {
+            "performance":    score("performance"),
+            "seo":            score("seo"),
+            "accessibility":  score("accessibility"),
+            "best_practices": score("best-practices"),
+        },
+        "field_data_cwv": field,
+        "lab_data": {k: v for k, v in lab.items() if v is not None},
+        "top_opportunities": opps[:5],
+    }
+
+
+# ── Schema.org / JSON-LD parser ───────────────────────────────────────────────
+
+class _JsonLdExtractor(HTMLParser):
+    """Extract all <script type="application/ld+json"> blocks from HTML."""
+    def __init__(self):
+        super().__init__()
+        self._in_ld = False
+        self._buf   = []
+        self.schemas = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            attrs_dict = dict(attrs)
+            if attrs_dict.get("type") == "application/ld+json":
+                self._in_ld = True
+                self._buf   = []
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._in_ld:
+            self._in_ld = False
+            raw = "".join(self._buf).strip()
+            if raw:
+                try:
+                    obj = json.loads(raw)
+                    items = obj if isinstance(obj, list) else [obj]
+                    for item in items:
+                        schema_type = item.get("@type", "Unknown")
+                        self.schemas.append({"type": schema_type, "data": item})
+                except Exception:
+                    pass
+
+    def handle_data(self, data):
+        if self._in_ld:
+            self._buf.append(data)
+
+
+def _extract_schema(url: str) -> list:
+    """Fetch a page and extract all JSON-LD schema.org objects."""
+    try:
+        r = httpx.get(url, follow_redirects=True, timeout=15,
+                      headers={"User-Agent": "Mozilla/5.0 (compatible; SEO-bot/1.0)"})
+        parser = _JsonLdExtractor()
+        parser.feed(r.text)
+        return parser.schemas
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+# ── New MCP tools ─────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def librecrawl_pagespeed(url: str, strategy: str = "mobile") -> dict:
+    """
+    Get Core Web Vitals + Lighthouse scores for a URL via Google PageSpeed Insights.
+    Requires PAGESPEED_API_KEY env var (free: console.cloud.google.com).
+
+    Returns: performance/SEO/accessibility scores, LCP/CLS/FCP/TBT lab data,
+    real-user field data (CrUX), and top speed opportunities.
+
+    Args:
+        url:      Full URL to test (e.g. https://example.com/page)
+        strategy: "mobile" (default) or "desktop"
+    """
+    return _fetch_psi(url, strategy)
+
+
+@mcp.tool()
+def librecrawl_pagespeed_audit(urls: list, strategy: str = "mobile") -> dict:
+    """
+    Run PageSpeed Insights on multiple URLs and return a ranked report.
+    Throttled to 1 req/sec to stay within Google's free quota.
+    Requires PAGESPEED_API_KEY env var.
+
+    Args:
+        urls:     List of URLs to test (recommended: top 10–20 pages)
+        strategy: "mobile" (default) or "desktop"
+    """
+    if not PSI_API_KEY:
+        return {"error": "PAGESPEED_API_KEY not set. Get one free at console.cloud.google.com → APIs → PageSpeed Insights API."}
+
+    results = []
+    for url in urls[:25]:   # cap at 25 to avoid quota burn
+        result = _fetch_psi(url, strategy)
+        results.append(result)
+        time.sleep(1.1)     # 1 req/sec = safe for free quota
+
+    # Sort by performance score ascending (worst first)
+    results.sort(key=lambda x: x.get("scores", {}).get("performance", 100))
+
+    summary = {
+        "tested": len(results),
+        "avg_performance": round(sum(r.get("scores",{}).get("performance",0) for r in results) / len(results)) if results else 0,
+        "poor_performance": sum(1 for r in results if r.get("scores",{}).get("performance",0) < 50),
+        "needs_improvement": sum(1 for r in results if 50 <= r.get("scores",{}).get("performance",0) < 90),
+        "good": sum(1 for r in results if r.get("scores",{}).get("performance",0) >= 90),
+    }
+    return {"summary": summary, "results": results}
+
+
+@mcp.tool()
+def librecrawl_schema_check(url: str) -> dict:
+    """
+    Extract and validate all Schema.org / JSON-LD structured data from a page.
+    No API key required — parses the live page directly.
+
+    Returns all schema types found, their data, and what Google rich results they enable.
+
+    Args:
+        url: Full URL to check (e.g. https://example.com/blog/post)
+    """
+    schemas = _extract_schema(url)
+
+    # Map schema types to rich results they unlock
+    RICH_RESULTS = {
+        "Article":           "Article rich result — date, author, image in SERP",
+        "BlogPosting":       "Article rich result",
+        "Product":           "Product snippet — price, availability, ratings",
+        "Review":            "Review snippet — star rating in SERP",
+        "AggregateRating":   "Star ratings in SERP",
+        "FAQPage":           "FAQ accordion directly in SERP (massive CTR boost)",
+        "HowTo":             "How-to steps in SERP",
+        "BreadcrumbList":    "Breadcrumb path shown in SERP URL",
+        "WebSite":           "Sitelinks searchbox in SERP",
+        "Organization":      "Knowledge panel — logo, contacts",
+        "Person":            "Author knowledge panel",
+        "LocalBusiness":     "Local business panel — address, hours, maps",
+        "SoftwareApplication": "App rating + price in SERP",
+        "VideoObject":       "Video thumbnail in SERP",
+        "Event":             "Event date/location in SERP",
+        "JobPosting":        "Job listing in Google Jobs",
+        "Recipe":            "Recipe rich card — time, calories, ratings",
+        "Course":            "Course info in SERP",
+    }
+
+    found_types = [s.get("type") for s in schemas if "type" in s]
+    rich_results_unlocked = [RICH_RESULTS[t] for t in found_types if t in RICH_RESULTS]
+    missing_opportunities = [
+        f"{t}: {desc}" for t, desc in RICH_RESULTS.items()
+        if t not in found_types and t in ["FAQPage", "BreadcrumbList", "Article", "Product", "Review"]
+    ]
+
+    return {
+        "url": url,
+        "schema_count": len(schemas),
+        "types_found": found_types,
+        "rich_results_enabled": rich_results_unlocked,
+        "missing_opportunities": missing_opportunities,
+        "schemas": schemas,
+    }
+
+
+@mcp.tool()
+def librecrawl_schema_audit(urls: list) -> dict:
+    """
+    Check Schema.org structured data across multiple URLs.
+    No API key required.
+
+    Args:
+        urls: List of URLs to check (pass top pages from a crawl export)
+    """
+    results    = []
+    no_schema  = []
+    type_count = defaultdict(int)
+
+    for url in urls[:50]:
+        schemas = _extract_schema(url)
+        types   = [s.get("type") for s in schemas if "type" in s]
+        for t in types:
+            type_count[t] += 1
+        if not types:
+            no_schema.append(url)
+        results.append({"url": url, "types": types, "count": len(schemas)})
+        time.sleep(0.3)
+
+    return {
+        "pages_checked":    len(results),
+        "pages_no_schema":  len(no_schema),
+        "schema_type_breakdown": dict(sorted(type_count.items(), key=lambda x: -x[1])),
+        "pages_missing_schema": no_schema[:30],
+        "results": results,
+    }
 
 
 if __name__ == "__main__":

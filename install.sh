@@ -322,17 +322,27 @@ log "Python dependencies installed"
 # ── Step 5: Register with PM2 ────────────────────────────────────────────────
 info "Step 5/5 — Registering with PM2..."
 
+# Optional: PageSpeed Insights API key
+if [[ -z "${PAGESPEED_API_KEY:-}" ]]; then
+  echo ""
+  echo -e "${YELLOW}Optional: Google PageSpeed Insights API key${NC}"
+  echo -e "  Enables Core Web Vitals (LCP, CLS, INP, FCP) and Lighthouse scores."
+  echo -e "  Get one free (25k req/day): https://console.cloud.google.com → APIs → PageSpeed Insights API"
+  echo -e "  Press Enter to skip for now."
+  read -rp "  PAGESPEED_API_KEY: " PAGESPEED_API_KEY
+fi
+
 pm2 stop "${PM2_NAME}"   2>/dev/null || true
 pm2 delete "${PM2_NAME}" 2>/dev/null || true
 
-LIBRECRAWL_PORT="${LIBRECRAWL_PORT}" MCP_PORT="${MCP_PORT}" \
 pm2 start "${MCP_DIR}/server.py" \
   --name "${PM2_NAME}" \
   --interpreter "${MCP_DIR}/venv/bin/python3" \
   --restart-delay 3000 \
   --max-restarts 10 \
   --env LIBRECRAWL_PORT="${LIBRECRAWL_PORT}" \
-  --env MCP_PORT="${MCP_PORT}"
+  --env MCP_PORT="${MCP_PORT}" \
+  --env PAGESPEED_API_KEY="${PAGESPEED_API_KEY:-}"
 
 pm2 save
 log "PM2 process registered and saved (survives reboots)"
