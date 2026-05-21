@@ -61,7 +61,7 @@ Claude gains **19 specialised SEO tools**. Ask in plain English — Claude picks
 - Persistent authenticated session across all tool calls — no re-login between steps
 - Every crawl saved to SQLite with full history via `librecrawl_list_crawls()`
 
-### Report engine — 35+ checks, 12 sections
+### Report engine — 35+ checks, 17 sections
 
 LibreCrawl's raw JSON export gets transformed into a structured audit report covering everything Screaming Frog covers, plus things it doesn't:
 
