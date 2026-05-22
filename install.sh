@@ -96,7 +96,7 @@ MAIN_PY="${LIBRECRAWL_DIR}/main.py"
 
 # Patch: move session_id read to AFTER get_or_create_crawler() which creates it.
 # Without this patch, crawl_id is always null and results are never saved to DB.
-python3 - << 'PATCHEOF'
+python3 - "${MAIN_PY}" << 'PATCHEOF'
 import sys
 
 path = sys.argv[1]
@@ -123,7 +123,7 @@ else:
     content = content.replace(old2, new2, 1)
     open(path, 'w').write(content)
     print("Session persistence patch applied")
-PATCHEOF "${MAIN_PY}"
+PATCHEOF
 
 # ── Step 3: Write Docker config + start LibreCrawl ───────────────────────────
 info "Step 3/5 — Building and starting LibreCrawl Docker container..."
